@@ -404,7 +404,10 @@ select.fi{cursor:pointer}
       <div id="mod-pedidos" style="display:none">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
           <div><h2 style="font-family:Syne,sans-serif;font-size:18px;font-weight:600">Pedidos de Compra</h2><p style="font-size:12px;color:var(--muted);margin-top:2px">Gerencie e acompanhe seus pedidos</p></div>
-          <button class="bsav" onclick="gerarPedido()"><i class="ti ti-wand"></i>Gerar pedido automático</button>
+          <div style="display:flex;gap:10px">
+            <button class="bsav" style="background:var(--surface2);border:1px solid var(--border2)" onclick="abrirLeitorNota()"><i class="ti ti-camera"></i>Ler nota manuscrita</button>
+            <button class="bsav" onclick="gerarPedido()"><i class="ti ti-wand"></i>Gerar pedido automático</button>
+          </div>
         </div>
         <div id="lista-pedidos"><div class="vazio"><i class="ti ti-clipboard-list"></i><p>Nenhum pedido ainda.<br>Clique em "Gerar pedido automático".</p></div></div>
       </div>
@@ -644,6 +647,84 @@ select.fi{cursor:pointer}
 </div>
 
 <!-- TOAST -->
+<!-- MODAL LEITOR DE NOTA -->
+<div class="mov" id="m-leitor-nota">
+  <div class="modal" style="width:700px;max-width:96vw">
+
+    <!-- Etapa 1: Upload da foto -->
+    <div id="ln-etapa-upload">
+      <h3 style="margin-bottom:6px"><i class="ti ti-camera" style="color:var(--accent)"></i> Ler nota manuscrita</h3>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:20px">Tire uma foto da sua lista de compras escrita à mão. O sistema vai reconhecer os itens automaticamente.</p>
+
+      <div id="ln-dropzone" onclick="document.getElementById('ln-input-foto').click()"
+        style="border:2px dashed var(--border2);border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;transition:border-color .2s;position:relative">
+        <i class="ti ti-photo-up" style="font-size:40px;color:var(--muted);display:block;margin-bottom:12px"></i>
+        <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">Clique para selecionar a foto</div>
+        <div style="font-size:12px;color:var(--muted)">JPG, PNG ou WEBP · até 10MB</div>
+        <img id="ln-preview-img" style="display:none;max-height:280px;max-width:100%;border-radius:8px;margin-top:16px;object-fit:contain">
+      </div>
+      <input type="file" id="ln-input-foto" accept="image/*" capture="environment" style="display:none" onchange="previewFotoNota(this)">
+
+      <div id="ln-erro-upload" style="display:none;background:var(--red-bg);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-top:12px"></div>
+
+      <div class="mbtns" style="margin-top:20px">
+        <button class="btn btn-ghost" onclick="fechM('m-leitor-nota')">Cancelar</button>
+        <button class="btn btn-primary" id="ln-btn-analisar" onclick="analisarNota()" style="display:none"><i class="ti ti-wand"></i> Analisar nota</button>
+      </div>
+    </div>
+
+    <!-- Etapa 2: Analisando -->
+    <div id="ln-etapa-analisando" style="display:none;text-align:center;padding:40px 20px">
+      <div style="width:56px;height:56px;border:3px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px"></div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Lendo a nota manuscrita...</div>
+      <div style="font-size:12px;color:var(--muted)">O Claude está interpretando a sua escrita e identificando os produtos</div>
+    </div>
+
+    <!-- Etapa 3: Revisão -->
+    <div id="ln-etapa-revisao" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h3 style="margin-bottom:2px"><i class="ti ti-list-check" style="color:var(--green)"></i> Itens reconhecidos</h3>
+          <p style="font-size:12px;color:var(--muted)">Revise, ajuste quantidades e confirme os itens antes de criar o pedido</p>
+        </div>
+        <button onclick="ln_etapa('upload')" style="background:none;border:1px solid var(--border2);color:var(--muted);padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer"><i class="ti ti-camera"></i> Nova foto</button>
+      </div>
+
+      <!-- Mini preview da foto -->
+      <div style="display:flex;gap:16px;margin-bottom:16px">
+        <img id="ln-mini-preview" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border2);flex-shrink:0">
+        <div id="ln-texto-reconhecido" style="flex:1;background:var(--surface2);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.7;max-height:90px;overflow-y:auto"></div>
+      </div>
+
+      <!-- Tabela de itens reconhecidos -->
+      <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:var(--surface2)">
+              <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Item reconhecido</th>
+              <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Produto vinculado</th>
+              <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;width:100px">Qtde</th>
+              <th style="padding:8px 12px;text-align:center;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;width:40px"></th>
+            </tr>
+          </thead>
+          <tbody id="ln-tabela-itens"></tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:12px;color:var(--muted)">
+        <i class="ti ti-info-circle"></i>
+        <span>Itens com <span style="color:var(--green)">●</span> verde foram vinculados ao cadastro. <span style="color:var(--yellow)">●</span> amarelo = não encontrado no cadastro.</span>
+      </div>
+
+      <div class="mbtns">
+        <button class="btn btn-ghost" onclick="fechM('m-leitor-nota')">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarListaNota()"><i class="ti ti-check"></i> Criar pedido com estes itens</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <div class="toast" id="toast"><i class="ti ti-check" id="tic"></i><span id="tmsg"></span></div>
 
 <script>
@@ -1269,6 +1350,293 @@ function toast(m,ok){
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
+// ════════════════════════════════════════════════
+// LEITOR DE NOTA MANUSCRITA — Claude Vision API
+// ════════════════════════════════════════════════
+
+var ln_fotoBase64 = null;
+var ln_fotoMime   = null;
+var ln_itens      = [];
+
+function abrirLeitorNota() {
+  ln_fotoBase64 = null;
+  ln_fotoMime   = null;
+  ln_itens      = [];
+  ln_etapa('upload');
+  // Limpar preview
+  var img = document.getElementById('ln-preview-img');
+  if (img) { img.style.display='none'; img.src=''; }
+  var inp = document.getElementById('ln-input-foto');
+  if (inp) inp.value = '';
+  var btnAn = document.getElementById('ln-btn-analisar');
+  if (btnAn) btnAn.style.display='none';
+  var erroEl = document.getElementById('ln-erro-upload');
+  if (erroEl) erroEl.style.display='none';
+  abrM('m-leitor-nota');
+}
+
+function ln_etapa(etapa) {
+  ['upload','analisando','revisao'].forEach(function(e){
+    var el = document.getElementById('ln-etapa-'+e);
+    if (el) el.style.display = e===etapa ? 'block' : 'none';
+  });
+}
+
+function previewFotoNota(input) {
+  var file = input.files[0];
+  if (!file) return;
+
+  if (file.size > 10*1024*1024) {
+    var er = document.getElementById('ln-erro-upload');
+    if (er) { er.textContent='Imagem muito grande. Use até 10MB.'; er.style.display='block'; }
+    return;
+  }
+
+  ln_fotoMime = file.type || 'image/jpeg';
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl = e.target.result;
+    ln_fotoBase64 = dataUrl.split(',')[1];
+
+    // Preview grande
+    var imgEl = document.getElementById('ln-preview-img');
+    if (imgEl) { imgEl.src=dataUrl; imgEl.style.display='block'; }
+
+    // Mini preview para revisão
+    var miniEl = document.getElementById('ln-mini-preview');
+    if (miniEl) miniEl.src = dataUrl;
+
+    // Mostrar botão analisar
+    var btnAn = document.getElementById('ln-btn-analisar');
+    if (btnAn) btnAn.style.display='inline-flex';
+
+    var er = document.getElementById('ln-erro-upload');
+    if (er) er.style.display='none';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analisarNota() {
+  if (!ln_fotoBase64) { toast('Selecione uma foto primeiro.', false); return; }
+
+  ln_etapa('analisando');
+
+  // Montar lista de produtos cadastrados para tentar vincular
+  var prodsCadastrados = PRODS.map(function(p){
+    return (p.nome||'') + (p.marca?' '+p.marca:'') + (p.cod?' ('+p.cod+')':'');
+  }).join('\n');
+
+  var prompt = `Você é um assistente de gestão de estoque. Analise esta foto de uma lista de compras escrita à mão.
+
+TAREFA:
+1. Identifique TODOS os itens escritos na lista
+2. Para cada item, extraia: nome do produto, quantidade (se especificada, senão use 1), unidade (se especificada)
+3. Tente vincular cada item com um produto da lista abaixo
+
+PRODUTOS CADASTRADOS NO SISTEMA:
+${prodsCadastrados || 'Nenhum produto cadastrado ainda.'}
+
+RESPONDA APENAS com JSON válido, sem texto antes ou depois, neste formato exato:
+{
+  "texto_reconhecido": "transcrição fiel do que está escrito na nota",
+  "itens": [
+    {
+      "texto_original": "exatamente como está escrito",
+      "nome_interpretado": "nome limpo do produto",
+      "quantidade": 1,
+      "unidade": "cx/kg/un/fardo/etc ou null",
+      "produto_vinculado": "nome exato do produto cadastrado ou null se não encontrou",
+      "confianca_vinculo": "alta/media/baixa ou null"
+    }
+  ]
+}`;
+
+  try {
+    var response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: ln_fotoMime, data: ln_fotoBase64 }
+            },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Erro na API: ' + response.status);
+    }
+
+    var data = await response.json();
+    var textoResposta = data.content[0].text;
+
+    // Limpar possíveis backticks do JSON
+    textoResposta = textoResposta.replace(/```json|```/g, '').trim();
+    var resultado = JSON.parse(textoResposta);
+
+    ln_itens = resultado.itens || [];
+
+    // Mostrar texto reconhecido
+    var textoEl = document.getElementById('ln-texto-reconhecido');
+    if (textoEl) textoEl.textContent = resultado.texto_reconhecido || 'Texto reconhecido da nota';
+
+    renderTabelaItensNota();
+    ln_etapa('revisao');
+
+  } catch(err) {
+    console.error('Erro ao analisar nota:', err);
+    ln_etapa('upload');
+    var er = document.getElementById('ln-erro-upload');
+    if (er) {
+      er.textContent = 'Não foi possível analisar a imagem. Tente com uma foto mais nítida e bem iluminada. (' + err.message + ')';
+      er.style.display = 'block';
+    }
+  }
+}
+
+function renderTabelaItensNota() {
+  var tbody = document.getElementById('ln-tabela-itens');
+  if (!tbody) return;
+
+  if (!ln_itens.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Nenhum item identificado. Tente com uma foto mais nítida.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = ln_itens.map(function(item, i) {
+    var vinculado  = item.produto_vinculado;
+    var conf       = item.confianca_vinculo;
+    var corBadge   = conf==='alta'?'var(--green)':conf==='media'?'var(--yellow)':'var(--orange)';
+    var txtBadge   = conf==='alta'?'Vinculado':'Provável';
+    var dot        = vinculado ? '<span style="color:'+corBadge+';font-size:8px;margin-right:4px">●</span>' : '<span style="color:var(--yellow);font-size:8px;margin-right:4px">●</span>';
+
+    // Select de vinculação
+    var optsSelect = '<option value="">— sem vínculo —</option>';
+    PRODS.forEach(function(p) {
+      var sel = (p.nome === vinculado) ? ' selected' : '';
+      optsSelect += '<option value="'+p.id+'"'+sel+'>'+(p.nome||'')+(p.marca?' · '+p.marca:'')+'</option>';
+    });
+
+    return '<tr style="border-bottom:1px solid var(--border)">'+
+      '<td style="padding:10px 12px">'+
+        '<div style="font-size:13px;font-weight:500;color:var(--text)">'+item.nome_interpretado+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:2px">Escrito: "'+item.texto_original+'"</div>'+
+      '</td>'+
+      '<td style="padding:10px 12px">'+
+        dot+
+        '<select id="ln-sel-prod-'+i+'" style="background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 8px;font-size:12px;width:100%">'+
+          optsSelect+
+        '</select>'+
+        (vinculado&&conf==='alta'?'<div style="font-size:10px;color:var(--green);margin-top:3px"><i class="ti ti-check"></i> Alta confiança</div>':'')+
+        (conf==='media'?'<div style="font-size:10px;color:var(--yellow);margin-top:3px"><i class="ti ti-alert-circle"></i> Confirme o vínculo</div>':'')+
+      '</td>'+
+      '<td style="padding:10px 12px;text-align:center">'+
+        '<input type="number" id="ln-qtd-'+i+'" value="'+(item.quantidade||1)+'" min="1" step="1" '+
+          'style="width:70px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 8px;font-size:13px;font-weight:600;text-align:center">'+
+        (item.unidade?'<div style="font-size:10px;color:var(--muted);margin-top:2px">'+item.unidade+'</div>':'')+
+      '</td>'+
+      '<td style="padding:10px 12px;text-align:center">'+
+        '<button onclick="ln_removerItem('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px" title="Remover item">'+
+          '<i class="ti ti-trash"></i>'+
+        '</button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
+
+function ln_removerItem(idx) {
+  ln_itens.splice(idx, 1);
+  renderTabelaItensNota();
+}
+
+function confirmarListaNota() {
+  if (!ln_itens.length) { toast('Nenhum item para criar pedido.', false); return; }
+
+  // Montar lista de pedido com os itens confirmados
+  var itensPedido = [];
+  ln_itens.forEach(function(item, i) {
+    var selEl = document.getElementById('ln-sel-prod-'+i);
+    var qtdEl = document.getElementById('ln-qtd-'+i);
+    var prodId = selEl ? selEl.value : '';
+    var qtd    = qtdEl ? (parseInt(qtdEl.value)||1) : (item.quantidade||1);
+
+    var prod = prodId ? PRODS.find(function(p){return String(p.id)===String(prodId);}) : null;
+
+    itensPedido.push({
+      prodId:       prodId || null,
+      nome:         prod ? (prod.nome||'') : item.nome_interpretado,
+      marca:        prod ? (prod.marca||'') : '',
+      qtd:          qtd,
+      unidade:      item.unidade || (prod ? prod.emb : '') || '',
+      custo:        prod ? (prod.cst||0) : 0,
+      texto_orig:   item.texto_original,
+      sem_cadastro: !prodId
+    });
+  });
+
+  fechM('m-leitor-nota');
+
+  // Abrir modal de pedido com itens pré-preenchidos
+  abrirPedidoComItens(itensPedido);
+}
+
+function abrirPedidoComItens(itens) {
+  // Tentar detectar fornecedor pelo produto mais frequente
+  var fornContagem = {};
+  itens.forEach(function(item) {
+    if (!item.prodId) return;
+    var prod = PRODS.find(function(p){ return String(p.id)===String(item.prodId); });
+    if (prod && prod.forn) fornContagem[prod.forn] = (fornContagem[prod.forn]||0)+1;
+  });
+  var fornMaisFreq = Object.keys(fornContagem).sort(function(a,b){ return fornContagem[b]-fornContagem[a]; })[0];
+  var fornObj = fornMaisFreq ? FORNECEDORES.find(function(f){ return f.nome===fornMaisFreq; }) : null;
+
+  pedidoFornAtual = fornObj || { id:null, nome:'(da nota manuscrita)', wpp:'' };
+
+  // Montar pedidoItens no formato esperado pelo modal
+  pedidoItens = itens.map(function(item) {
+    var prod = item.prodId ? PRODS.find(function(p){ return String(p.id)===String(item.prodId); }) : null;
+    return {
+      id:       item.prodId || null,
+      nome:     item.nome || item.texto_orig,
+      marca:    item.marca || (prod ? prod.marca||'' : ''),
+      estoque:  prod ? prod.estoque||0 : 0,
+      pp:       prod ? prod.ponto_pedido||0 : 0,
+      qtde:     item.qtd || 1,
+      abc:      prod ? prod.abc||'C' : 'C',
+      status:   prod ? prod.status||'ok' : 'manual',
+      custo:    item.custo || (prod ? prod.cst||0 : 0),
+      unidade:  item.unidade || (prod ? prod.emb||'' : ''),
+      sem_cadastro: item.sem_cadastro,
+      texto_orig:   item.texto_orig
+    };
+  });
+
+  // Configurar modal
+  var titulo = document.getElementById('mp-titulo');
+  var sub    = document.getElementById('mp-sub');
+  if (titulo) titulo.textContent = 'Pedido — Lista manuscrita';
+  if (sub)    sub.textContent    = itens.length+' itens reconhecidos'+(fornObj?' · Fornecedor sugerido: '+fornObj.nome:'');
+
+  // Selecionar fornecedor se detectado
+  var selForn = document.getElementById('mp-forn');
+  if (selForn && fornObj) selForn.value = fornObj.id;
+
+  abrM('m-pedido');
+  renderItensModal();
+  atualizarPreviewPedido();
+  toast('Lista criada com '+itens.length+' itens! Revise e envie.', true);
+}
+
 function inicializar(){
   var cfg=ls('cfg'); if(cfg) Object.assign(CFG,cfg);
   carregarProds();
