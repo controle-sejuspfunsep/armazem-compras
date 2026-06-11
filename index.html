@@ -298,6 +298,8 @@ select.fi{cursor:pointer}
       <button class="nb" onclick="setMod('pedidos',this)"><i class="ti ti-clipboard-list"></i>Pedidos</button>
       <button class="nb" onclick="setMod('fornecedores',this)"><i class="ti ti-truck"></i>Fornecedores</button>
       <button class="nb" onclick="setMod('abc',this)"><i class="ti ti-chart-bar"></i>Curva ABC</button>
+      <button class="nb" onclick="setMod('precos',this);renderHistPrecos()"><i class="ti ti-trending-up"></i>Preços</button>
+      <button class="nb" id="btn-validades" onclick="setMod('validades',this);renderValidades()"><i class="ti ti-calendar-x"></i>Validades<span id="badge-val" style="display:none;background:#ef4444;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:5px">!</span></button>
       <button class="nb" onclick="setMod('config',this)"><i class="ti ti-settings"></i>Config</button>
     </div>
     <div class="topbar-right">
@@ -580,6 +582,173 @@ select.fi{cursor:pointer}
         </div>
       </div>
 
+      <!-- HISTÓRICO DE PREÇOS -->
+      <div id="mod-precos" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+          <div>
+            <h2 style="font-family:Syne,sans-serif;font-size:18px;font-weight:600">Histórico de Preços</h2>
+            <p style="font-size:12px;color:var(--muted);margin-top:2px">Acompanhe a evolução do custo de cada produto ao longo do tempo</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="text" class="fi" id="preco-busca" placeholder="Buscar produto..." oninput="renderHistPrecos()" style="width:220px;font-size:12px">
+            <select class="fi" id="preco-forn-filtro" onchange="renderHistPrecos()" style="width:180px;font-size:12px">
+              <option value="">Todos fornecedores</option>
+            </select>
+            <button class="bexp" onclick="exportarHistPrecos()"><i class="ti ti-download"></i>Exportar CSV</button>
+          </div>
+        </div>
+
+        <!-- CARDS RESUMO -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="precos-cards">
+          <div class="cstat" style="cursor:default">
+            <div class="clbl"><i class="ti ti-package"></i> Produtos monitorados</div>
+            <div class="cnum" id="pc-total">0</div>
+            <div class="csub">com histórico de custo</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid var(--red);cursor:default">
+            <div class="clbl"><i class="ti ti-trending-up"></i> Maiores altas</div>
+            <div class="cnum" id="pc-alta" style="color:var(--red)">—</div>
+            <div class="csub" id="pc-alta-nome">nos últimos 90 dias</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid var(--green);cursor:default">
+            <div class="clbl"><i class="ti ti-trending-down"></i> Maiores quedas</div>
+            <div class="cnum" id="pc-queda" style="color:var(--green)">—</div>
+            <div class="csub" id="pc-queda-nome">nos últimos 90 dias</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid var(--yellow);cursor:default">
+            <div class="clbl"><i class="ti ti-clock"></i> Última atualização</div>
+            <div class="cnum" style="font-size:16px" id="pc-ultima">—</div>
+            <div class="csub" id="pc-ultima-prod">—</div>
+          </div>
+        </div>
+
+        <!-- SELETOR DE PRODUTO PARA GRÁFICO -->
+        <div class="card-sec" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+            <h3 style="margin:0"><i class="ti ti-chart-line" style="color:var(--accent)"></i> Evolução do custo</h3>
+            <div style="display:flex;gap:8px;align-items:center">
+              <select class="fi" id="grafico-prod-sel" onchange="renderGraficoPreco()" style="width:280px;font-size:12px">
+                <option value="">Selecione um produto para ver o gráfico...</option>
+              </select>
+              <select class="fi" id="grafico-periodo" onchange="renderGraficoPreco()" style="width:130px;font-size:12px">
+                <option value="90">Últimos 90 dias</option>
+                <option value="180">Últimos 6 meses</option>
+                <option value="365">Último ano</option>
+                <option value="0">Todo o período</option>
+              </select>
+            </div>
+          </div>
+          <div id="grafico-wrap" style="position:relative;height:240px;display:flex;align-items:center;justify-content:center">
+            <div style="color:var(--muted);font-size:13px;text-align:center">
+              <i class="ti ti-chart-line" style="font-size:32px;display:block;margin-bottom:8px;opacity:.3"></i>
+              Selecione um produto acima para ver o gráfico de evolução
+            </div>
+          </div>
+          <div id="grafico-resumo" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:24px;flex-wrap:wrap"></div>
+        </div>
+
+        <!-- TABELA COMPLETA -->
+        <div class="card-sec" style="padding:0">
+          <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+            <h3 style="margin:0"><i class="ti ti-history" style="color:var(--accent)"></i> Todos os registros de preço</h3>
+            <span id="precos-contagem" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+          <div style="overflow-x:auto">
+            <table style="width:100%">
+              <thead>
+                <tr>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px;white-space:nowrap">Produto</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Fornecedor</th>
+                  <th style="padding:10px 14px;text-align:right;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Preço anterior</th>
+                  <th style="padding:10px 14px;text-align:right;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Novo preço</th>
+                  <th style="padding:10px 14px;text-align:right;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Variação</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Data</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Registrado por</th>
+                </tr>
+              </thead>
+              <tbody id="hist-precos-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VALIDADES -->
+      <div id="mod-validades" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px">
+          <div>
+            <h2 style="font-family:Syne,sans-serif;font-size:18px;font-weight:600">Controle de Validade</h2>
+            <p style="font-size:12px;color:var(--muted);margin-top:2px">Monitore vencimentos por produto e por lote. Alertas em 90, 60 e 30 dias.</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="bsav" style="background:var(--surface2);border:1px solid var(--border2)" onclick="abrirWppValidades()"><i class="ti ti-brand-whatsapp"></i>Alertar no WhatsApp</button>
+            <button class="bsav" onclick="abrirModalValidade(null)"><i class="ti ti-plus"></i>Registrar validade</button>
+          </div>
+        </div>
+
+        <!-- CARDS RESUMO -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+          <div class="cstat cr" style="cursor:default">
+            <div class="clbl"><i class="ti ti-skull"></i> Vencidos</div>
+            <div class="cnum" id="vc-vencido">0</div>
+            <div class="csub">Retirar do estoque</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid #ef4444;cursor:default">
+            <div class="clbl"><i class="ti ti-alert-triangle"></i> Até 30 dias</div>
+            <div class="cnum" id="vc-30" style="color:#ef4444">0</div>
+            <div class="csub">Urgente</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid #f59e0b;cursor:default">
+            <div class="clbl"><i class="ti ti-eye"></i> 31–60 dias</div>
+            <div class="cnum" id="vc-60" style="color:#f59e0b">0</div>
+            <div class="csub">Atenção</div>
+          </div>
+          <div class="cstat" style="border-top:2px solid #3b82f6;cursor:default">
+            <div class="clbl"><i class="ti ti-clock"></i> 61–90 dias</div>
+            <div class="cnum" id="vc-90" style="color:#3b82f6">0</div>
+            <div class="csub">Monitorar</div>
+          </div>
+        </div>
+
+        <!-- FILTROS -->
+        <div class="tlb" style="margin-bottom:14px">
+          <div class="sw"><i class="ti ti-search"></i><input type="text" id="val-busca" placeholder="Buscar produto ou lote..." oninput="renderValidades()"></div>
+          <select class="sel" id="val-filtro" onchange="renderValidades()">
+            <option value="todos">Todos os registros</option>
+            <option value="vencido">Vencidos</option>
+            <option value="30">Até 30 dias</option>
+            <option value="60">31–60 dias</option>
+            <option value="90">61–90 dias</option>
+            <option value="ok">Acima de 90 dias</option>
+          </select>
+          <select class="sel" id="val-tipo" onchange="renderValidades()">
+            <option value="todos">Produto e Lote</option>
+            <option value="produto">Só produto</option>
+            <option value="lote">Só lotes</option>
+          </select>
+          <button class="bexp" onclick="exportarValidades()"><i class="ti ti-download"></i>Exportar CSV</button>
+        </div>
+
+        <!-- TABELA -->
+        <div class="card-sec" style="padding:0">
+          <div style="overflow-x:auto">
+            <table style="width:100%">
+              <thead>
+                <tr>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Produto</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Tipo</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Nº Lote</th>
+                  <th style="padding:10px 14px;text-align:right;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Qtde</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Validade</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Situação</th>
+                  <th style="padding:10px 14px;text-align:left;font-size:10px;color:var(--subtle);text-transform:uppercase;letter-spacing:.8px">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="val-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
 </div>
@@ -648,6 +817,59 @@ select.fi{cursor:pointer}
     </div>
     <div class="ilog" id="imp-log"></div>
     <div class="mbtns"><button class="bcn" onclick="fechM('m-imp')">Fechar</button></div>
+  </div>
+</div>
+
+<!-- MODAL VALIDADE -->
+<div class="mov" id="m-validade">
+  <div class="modal" style="width:480px">
+    <h3><i class="ti ti-calendar-x" style="color:var(--accent)"></i><span id="mval-titulo">Registrar Validade</span></h3>
+    <div class="msub">Cadastre a data de vencimento de um produto ou lote específico</div>
+
+    <div style="display:grid;gap:14px;margin-top:16px">
+      <div>
+        <label class="fl">Produto</label>
+        <select class="fi" id="mval-prod" onchange="mvalProdChange()">
+          <option value="">Selecione o produto...</option>
+        </select>
+      </div>
+      <div>
+        <label class="fl">Tipo de controle</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="orgao-btn" id="mval-btn-prod" onclick="mvalTipo('produto')" style="flex:1;justify-content:center">
+            <i class="ti ti-package"></i> Por Produto
+          </button>
+          <button class="orgao-btn" id="mval-btn-lote" onclick="mvalTipo('lote')" style="flex:1;justify-content:center">
+            <i class="ti ti-barcode"></i> Por Lote
+          </button>
+        </div>
+      </div>
+      <div id="mval-lote-wrap" style="display:none">
+        <label class="fl">Número do Lote</label>
+        <input type="text" class="fi" id="mval-lote" placeholder="Ex: LOT240601">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <label class="fl">Quantidade em estoque</label>
+          <input type="number" class="fi" id="mval-qtde" placeholder="Ex: 50" min="0" step="1">
+        </div>
+        <div>
+          <label class="fl">Data de validade</label>
+          <input type="date" class="fi" id="mval-data">
+        </div>
+      </div>
+      <div>
+        <label class="fl">Observação (opcional)</label>
+        <input type="text" class="fi" id="mval-obs" placeholder="Ex: Produto no depósito A3">
+      </div>
+    </div>
+
+    <input type="hidden" id="mval-id">
+    <div id="mval-erro" style="display:none;background:var(--red-bg);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-top:12px"></div>
+    <div class="mbtns" style="margin-top:20px">
+      <button class="bcn" onclick="fechM('m-validade')">Cancelar</button>
+      <button class="bsav" onclick="salvarValidade()"><i class="ti ti-device-floppy"></i>Salvar</button>
+    </div>
   </div>
 </div>
 
@@ -1205,11 +1427,258 @@ function auto_lead(){
   document.getElementById('p-lead').value=tip==='externo'?CFG.leadExterno:CFG.leadLocal;
 }
 
+// ═══════════════════════════════════════════════
+// HISTÓRICO DE PREÇOS
+// ═══════════════════════════════════════════════
+var HIST_PRECOS = []; // [{produto_id, produto_nome, fornecedor, custo_anterior, custo_novo, variacao_pct, data, usuario}]
+
+function carregarHistPrecos(){
+  var salvo = ls('hist_precos');
+  HIST_PRECOS = salvo || [];
+}
+
+function salvarHistPrecos(){
+  ls('hist_precos', HIST_PRECOS);
+}
+
+function registrarVariacaoPreco(prodAtual, novoCusto){
+  var custoAnterior = prodAtual ? (prodAtual.custo || 0) : 0;
+  if(!novoCusto || novoCusto === custoAnterior) return; // sem mudança, não registra
+  var variacao = custoAnterior > 0 ? ((novoCusto - custoAnterior) / custoAnterior * 100) : 0;
+  var registro = {
+    id: Date.now(),
+    produto_id: prodAtual ? (prodAtual.id || prodAtual.codigo_erp) : null,
+    produto_nome: prodAtual ? prodAtual.nome : '',
+    fornecedor: prodAtual ? (prodAtual.fornecedor_nome || prodAtual.fornecedor || '—') : '—',
+    custo_anterior: custoAnterior,
+    custo_novo: novoCusto,
+    variacao_pct: variacao,
+    data: new Date().toISOString(),
+    usuario: CFG.usuarios && CFG.usuarios[0] ? CFG.usuarios[0].nome : 'Leo'
+  };
+  HIST_PRECOS.unshift(registro); // mais recente primeiro
+  salvarHistPrecos();
+}
+
+function renderHistPrecos(){
+  var busca  = (document.getElementById('preco-busca')||{value:''}).value.toLowerCase();
+  var fforn  = (document.getElementById('preco-forn-filtro')||{value:''}).value;
+
+  // Popular select de fornecedores
+  var fornSel = document.getElementById('preco-forn-filtro');
+  if(fornSel){
+    var forns = [...new Set(HIST_PRECOS.map(function(h){return h.fornecedor;}).filter(Boolean))].sort();
+    var atualForn = fornSel.value;
+    fornSel.innerHTML = '<option value="">Todos fornecedores</option>' +
+      forns.map(function(f){ return '<option value="'+f+'"'+(f===atualForn?' selected':'')+'>'+f+'</option>'; }).join('');
+  }
+
+  // Popular select do gráfico
+  var grafSel = document.getElementById('grafico-prod-sel');
+  if(grafSel){
+    var prods = [...new Map(HIST_PRECOS.map(function(h){ return [h.produto_nome, h]; })).values()];
+    var atualProd = grafSel.value;
+    grafSel.innerHTML = '<option value="">Selecione um produto para ver o gráfico...</option>' +
+      prods.map(function(h){ return '<option value="'+h.produto_nome+'"'+(h.produto_nome===atualProd?' selected':'')+'>'+h.produto_nome+'</option>'; }).join('');
+    if(atualProd) grafSel.value = atualProd;
+  }
+
+  // Filtrar
+  var filtrado = HIST_PRECOS.filter(function(h){
+    var mb = !busca || (h.produto_nome||'').toLowerCase().indexOf(busca)>=0 || (h.fornecedor||'').toLowerCase().indexOf(busca)>=0;
+    var mf = !fforn || h.fornecedor === fforn;
+    return mb && mf;
+  });
+
+  // Cards de resumo
+  var total = [...new Set(HIST_PRECOS.map(function(h){return h.produto_nome;}))].length;
+  document.getElementById('pc-total').textContent = total;
+
+  var noventa = new Date(); noventa.setDate(noventa.getDate()-90);
+  var recentes = HIST_PRECOS.filter(function(h){ return new Date(h.data) >= noventa; });
+
+  // Maior alta
+  var maioresAltas = recentes.filter(function(h){return h.variacao_pct>0;}).sort(function(a,b){return b.variacao_pct-a.variacao_pct;});
+  if(maioresAltas.length){
+    document.getElementById('pc-alta').textContent = '+'+maioresAltas[0].variacao_pct.toFixed(1)+'%';
+    document.getElementById('pc-alta-nome').textContent = maioresAltas[0].produto_nome.substring(0,25);
+  } else {
+    document.getElementById('pc-alta').textContent = '—';
+    document.getElementById('pc-alta-nome').textContent = 'últimos 90 dias';
+  }
+
+  // Maior queda
+  var maioresQuedas = recentes.filter(function(h){return h.variacao_pct<0;}).sort(function(a,b){return a.variacao_pct-b.variacao_pct;});
+  if(maioresQuedas.length){
+    document.getElementById('pc-queda').textContent = maioresQuedas[0].variacao_pct.toFixed(1)+'%';
+    document.getElementById('pc-queda-nome').textContent = maioresQuedas[0].produto_nome.substring(0,25);
+  } else {
+    document.getElementById('pc-queda').textContent = '—';
+    document.getElementById('pc-queda-nome').textContent = 'últimos 90 dias';
+  }
+
+  // Última atualização
+  if(HIST_PRECOS.length){
+    var ult = HIST_PRECOS[0];
+    document.getElementById('pc-ultima').textContent = new Date(ult.data).toLocaleDateString('pt-BR');
+    document.getElementById('pc-ultima-prod').textContent = (ult.produto_nome||'').substring(0,22);
+  }
+
+  // Tabela
+  var tbody = document.getElementById('hist-precos-tbody');
+  document.getElementById('precos-contagem').textContent = filtrado.length + ' registros';
+
+  if(!filtrado.length){
+    tbody.innerHTML='<tr><td colspan="7" class="vazio" style="padding:30px;text-align:center;color:var(--muted)"><i class="ti ti-history" style="font-size:28px;display:block;margin-bottom:8px;opacity:.3"></i>Nenhum registro ainda.<br><span style="font-size:11px">O histórico é gerado automaticamente quando você salva um produto com novo preço de custo.</span></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtrado.map(function(h){
+    var vp = h.variacao_pct || 0;
+    var cor = vp > 0 ? 'var(--red)' : vp < 0 ? 'var(--green)' : 'var(--muted)';
+    var icone = vp > 0 ? 'ti-trending-up' : vp < 0 ? 'ti-trending-down' : 'ti-minus';
+    var dt = new Date(h.data).toLocaleDateString('pt-BR');
+    var hr = new Date(h.data).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    return '<tr style="border-bottom:1px solid var(--border)">'+
+      '<td style="padding:10px 14px;font-size:12px;font-weight:500;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+h.produto_nome+'">'+h.produto_nome+'</td>'+
+      '<td style="padding:10px 14px;font-size:11px;color:var(--muted)">'+h.fornecedor+'</td>'+
+      '<td style="padding:10px 14px;font-size:12px;text-align:right;color:var(--muted)">'+moeda(h.custo_anterior)+'</td>'+
+      '<td style="padding:10px 14px;font-size:12px;text-align:right;font-weight:600">'+moeda(h.custo_novo)+'</td>'+
+      '<td style="padding:10px 14px;font-size:12px;text-align:right"><span style="color:'+cor+';font-weight:600;display:flex;align-items:center;gap:4px;justify-content:flex-end"><i class="ti '+icone+'" style="font-size:11px"></i>'+(vp!==0?(vp>0?'+':'')+vp.toFixed(1)+'%':'—')+'</span></td>'+
+      '<td style="padding:10px 14px;font-size:11px;color:var(--muted);white-space:nowrap">'+dt+' '+hr+'</td>'+
+      '<td style="padding:10px 14px;font-size:11px;color:var(--muted)">'+h.usuario+'</td>'+
+    '</tr>';
+  }).join('');
+
+  // Atualizar gráfico se um produto estiver selecionado
+  if(document.getElementById('grafico-prod-sel') && document.getElementById('grafico-prod-sel').value){
+    renderGraficoPreco();
+  }
+}
+
+function renderGraficoPreco(){
+  var sel     = document.getElementById('grafico-prod-sel');
+  var periodo = parseInt(document.getElementById('grafico-periodo').value) || 0;
+  var wrap    = document.getElementById('grafico-wrap');
+  var resumo  = document.getElementById('grafico-resumo');
+  if(!sel || !sel.value){ return; }
+
+  var nomeProd = sel.value;
+  var dados = HIST_PRECOS.filter(function(h){ return h.produto_nome === nomeProd; });
+
+  // Filtrar por período
+  if(periodo > 0){
+    var corte = new Date(); corte.setDate(corte.getDate() - periodo);
+    dados = dados.filter(function(h){ return new Date(h.data) >= corte; });
+  }
+
+  // Ordenar cronologicamente
+  dados = dados.slice().sort(function(a,b){ return new Date(a.data)-new Date(b.data); });
+
+  if(!dados.length){
+    wrap.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center"><i class="ti ti-calendar-off" style="font-size:32px;display:block;margin-bottom:8px;opacity:.3"></i>Nenhum registro neste período</div>';
+    resumo.style.display='none';
+    return;
+  }
+
+  // Montar pontos do gráfico SVG
+  var W=800, H=220, PAD={t:20,r:20,b:40,l:70};
+  var vals = dados.map(function(h){return h.custo_novo;});
+  var datas = dados.map(function(h){return new Date(h.data);});
+  var min = Math.min.apply(null,vals)*0.95;
+  var max = Math.max.apply(null,vals)*1.05;
+  if(min===max){min=min*0.9;max=max*1.1;}
+
+  function px(i){ return PAD.l + (i/(dados.length-1||1))*(W-PAD.l-PAD.r); }
+  function py(v){ return PAD.t + (1-(v-min)/(max-min))*(H-PAD.t-PAD.b); }
+
+  // Grades horizontais
+  var grades = '';
+  var steps = 4;
+  for(var g=0;g<=steps;g++){
+    var gv = min + (max-min)*g/steps;
+    var gy = py(gv);
+    grades += '<line x1="'+PAD.l+'" y1="'+gy+'" x2="'+(W-PAD.r)+'" y2="'+gy+'" stroke="rgba(255,255,255,.06)" stroke-width="1"/>';
+    grades += '<text x="'+(PAD.l-8)+'" y="'+(gy+4)+'" fill="var(--muted)" font-size="10" text-anchor="end">R$'+gv.toFixed(2).replace('.',',')+'</text>';
+  }
+
+  // Linha e área
+  var pontos = dados.map(function(h,i){ return px(i)+','+py(h.custo_novo); }).join(' ');
+  var area = 'M'+px(0)+','+H+' '+dados.map(function(h,i){ return 'L'+px(i)+','+py(h.custo_novo); }).join(' ')+' L'+px(dados.length-1)+','+H+' Z';
+
+  // Pontos e labels de data
+  var circles = ''; var xlabels = '';
+  var maxLabels = Math.min(dados.length, 8);
+  var step = Math.max(1, Math.floor(dados.length/maxLabels));
+
+  dados.forEach(function(h,i){
+    var cx=px(i), cy=py(h.custo_novo);
+    circles += '<circle cx="'+cx+'" cy="'+cy+'" r="4" fill="var(--accent)" stroke="var(--bg)" stroke-width="2">'+
+      '<title>'+h.custo_novo.toFixed(2)+' em '+new Date(h.data).toLocaleDateString('pt-BR')+'</title></circle>';
+    if(i%step===0 || i===dados.length-1){
+      var d=new Date(h.data);
+      xlabels += '<text x="'+cx+'" y="'+(H-4)+'" fill="var(--muted)" font-size="9" text-anchor="middle">'+d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+'</text>';
+    }
+  });
+
+  var svg='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:100%;overflow:visible" xmlns="http://www.w3.org/2000/svg">'+
+    grades+
+    '<defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".3"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>'+
+    '<path d="'+area+'" fill="url(#ga)"/>'+
+    '<polyline points="'+pontos+'" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'+
+    circles+xlabels+
+  '</svg>';
+
+  wrap.innerHTML = svg;
+  wrap.style.display='block';
+
+  // Resumo
+  var primeiro = dados[0].custo_novo, ultimo = dados[dados.length-1].custo_novo;
+  var varTotal = primeiro>0?((ultimo-primeiro)/primeiro*100):0;
+  var corVar = varTotal>0?'var(--red)':varTotal<0?'var(--green)':'var(--muted)';
+  resumo.style.display='flex';
+  resumo.innerHTML=
+    '<div style="font-size:12px"><span style="color:var(--muted)">Primeiro registro</span><br><strong>'+moeda(primeiro)+'</strong></div>'+
+    '<div style="font-size:12px"><span style="color:var(--muted)">Preço atual</span><br><strong>'+moeda(ultimo)+'</strong></div>'+
+    '<div style="font-size:12px"><span style="color:var(--muted)">Variação total</span><br><strong style="color:'+corVar+'">'+(varTotal>0?'+':'')+varTotal.toFixed(1)+'%</strong></div>'+
+    '<div style="font-size:12px"><span style="color:var(--muted)">Registros</span><br><strong>'+dados.length+'</strong></div>';
+}
+
+function exportarHistPrecos(){
+  if(!HIST_PRECOS.length){toast('Nenhum histórico para exportar.',false);return;}
+  var csv='Produto;Fornecedor;Preço Anterior;Novo Preço;Variação %;Data;Usuário\n';
+  HIST_PRECOS.forEach(function(h){
+    csv+='"'+(h.produto_nome||'')+'";"'+(h.fornecedor||'')+'";"'+
+      (h.custo_anterior||0).toFixed(2)+'";"'+(h.custo_novo||0).toFixed(2)+'";'+
+      (h.variacao_pct||0).toFixed(2)+';"'+new Date(h.data).toLocaleDateString('pt-BR')+'";"'+(h.usuario||'')+'"\n';
+  });
+  var a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,\uFEFF'+encodeURIComponent(csv);
+  a.download='historico_precos_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+  toast('CSV exportado!',true);
+}
+
 async function salvarProd(){
+  var novoCusto = parseFloat(document.getElementById('p-cst').value)||0;
+  var nomeDigitado = document.getElementById('p-nom').value.trim().toUpperCase();
+  var codErp = document.getElementById('p-cod').value.trim();
+
+  // Buscar produto atual para comparar preço
+  var prodAtual = PRODS.find(function(x){
+    return (codErp && String(x.codigo_erp||x.id)===codErp) || x.nome===nomeDigitado;
+  });
+
+  // Registrar variação de preço ANTES de salvar (se o custo mudou)
+  if(novoCusto > 0) {
+    var prodParaHist = prodAtual || { nome: nomeDigitado, custo: 0, fornecedor_nome: document.getElementById('p-for').value.trim() };
+    registrarVariacaoPreco(prodParaHist, novoCusto);
+  }
+
   var p={
-    codigo_erp:document.getElementById('p-cod').value.trim(),
+    codigo_erp:codErp,
     codigo_barras:document.getElementById('p-bar').value.trim(),
-    nome:document.getElementById('p-nom').value.trim().toUpperCase(),
+    nome:nomeDigitado,
     marca:document.getElementById('p-mar').value.trim().toUpperCase(),
     fornecedor_nome:document.getElementById('p-for').value.trim(),
     tipo_forn:document.getElementById('p-tip').value,
@@ -1219,7 +1688,7 @@ async function salvarProd(){
     estoque:parseFloat(document.getElementById('p-est').value)||0,
     estoque_minimo:parseFloat(document.getElementById('p-min').value)||0,
     estoque_maximo:parseFloat(document.getElementById('p-max').value)||0,
-    custo:parseFloat(document.getElementById('p-cst').value)||0,
+    custo:novoCusto,
     preco_venda:parseFloat(document.getElementById('p-pvd').value)||0,
     venda_dia:0, inativo:false,
   };
@@ -1227,13 +1696,12 @@ async function salvarProd(){
   if(sbConectado && sbClient){
     var r=await sbClient.from('produtos').upsert(p,{onConflict:'codigo_erp'});
     if(r.error){toast('Erro Supabase: '+r.error.message,false);return;}
-    log.innerHTML+='<div class="lok">Salvo na nuvem!</div>';
   }
   var proc_p=proc([Object.assign({id:p.codigo_erp||Date.now()},p)])[0];
   var idx=PRODS.findIndex(function(x){return String(x.id)===String(proc_p.id)||x.nome===proc_p.nome;});
   if(idx>-1) PRODS[idx]=proc_p; else PRODS.push(proc_p);
   ls('produtos',PRODS); atualizarFornSel(); filtrar(); limparProd();
-  toast('Produto salvo!',true);
+  toast('Produto salvo! Preço registrado no histórico.',true);
   setMod('dashboard',document.querySelectorAll('.nb')[0]);
 }
 
@@ -1318,7 +1786,7 @@ function renderUsuarios(){
 // MÓDULOS
 // ═══════════════════════════════════════════════
 function setMod(m,el){
-  ['dashboard','produtos','pedidos','config','abc','fornecedores'].forEach(function(x){
+  ['dashboard','produtos','pedidos','config','abc','fornecedores','precos','validades'].forEach(function(x){
     var el2=document.getElementById('mod-'+x);
     if(el2) el2.style.display=x===m?'block':'none';
   });
@@ -1642,9 +2110,253 @@ function abrirPedidoComItens(itens) {
   toast('Lista criada com '+itens.length+' itens! Revise e envie.', true);
 }
 
+// ═══════════════════════════════════════════════
+// CONTROLE DE VALIDADE
+// ═══════════════════════════════════════════════
+var VALIDADES = []; // [{id, produto_nome, tipo:'produto'|'lote', lote, qtde, data_val, obs, created_at}]
+
+function carregarValidades() {
+  VALIDADES = ls('validades') || [];
+  verificarAlertasValidade();
+}
+
+function salvarValidades() {
+  ls('validades', VALIDADES);
+}
+
+function diasParaVencer(dataStr) {
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var val  = new Date(dataStr + 'T00:00:00');
+  return Math.floor((val - hoje) / 86400000);
+}
+
+function statusValidade(dias) {
+  if (dias < 0)   return { label: 'VENCIDO',    cor: '#ef4444', bg: 'rgba(239,68,68,.12)',   cls: 'vencido' };
+  if (dias <= 30) return { label: '≤ 30 dias',  cor: '#ef4444', bg: 'rgba(239,68,68,.08)',   cls: '30' };
+  if (dias <= 60) return { label: '31–60 dias', cor: '#f59e0b', bg: 'rgba(245,158,11,.08)', cls: '60' };
+  if (dias <= 90) return { label: '61–90 dias', cor: '#3b82f6', bg: 'rgba(59,130,246,.08)', cls: '90' };
+  return { label: 'OK', cor: '#22c55e', bg: 'rgba(34,197,94,.08)', cls: 'ok' };
+}
+
+function verificarAlertasValidade() {
+  var alertas = VALIDADES.filter(function(v) {
+    return diasParaVencer(v.data_val) <= 90;
+  });
+  var badge = document.getElementById('badge-val');
+  if (badge) badge.style.display = alertas.length ? 'inline' : 'none';
+}
+
+function renderValidades() {
+  var busca  = (document.getElementById('val-busca')||{value:''}).value.toLowerCase();
+  var filtro = (document.getElementById('val-filtro')||{value:'todos'}).value;
+  var tipo   = (document.getElementById('val-tipo')||{value:'todos'}).value;
+
+  // Calcular cards
+  var cnt = { vencido:0, 30:0, 60:0, 90:0 };
+  VALIDADES.forEach(function(v) {
+    var d = diasParaVencer(v.data_val);
+    var s = statusValidade(d).cls;
+    if (s === 'vencido') cnt.vencido++;
+    else if (s === '30')  cnt['30']++;
+    else if (s === '60')  cnt['60']++;
+    else if (s === '90')  cnt['90']++;
+  });
+  ['vencido','30','60','90'].forEach(function(k) {
+    var el = document.getElementById('vc-'+k);
+    if (el) el.textContent = cnt[k];
+  });
+
+  // Filtrar
+  var lista = VALIDADES.filter(function(v) {
+    var d = diasParaVencer(v.data_val);
+    var s = statusValidade(d).cls;
+    var mb = !busca || (v.produto_nome||'').toLowerCase().indexOf(busca)>=0 || (v.lote||'').toLowerCase().indexOf(busca)>=0;
+    var mf = filtro === 'todos' || s === filtro;
+    var mt = tipo === 'todos' || v.tipo === tipo;
+    return mb && mf && mt;
+  }).sort(function(a,b){ return new Date(a.data_val)-new Date(b.data_val); });
+
+  var tbody = document.getElementById('val-tbody');
+  if (!tbody) return;
+
+  if (!lista.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)"><i class="ti ti-calendar-check" style="font-size:28px;display:block;margin-bottom:8px;opacity:.3"></i>Nenhum registro encontrado.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = lista.map(function(v) {
+    var dias  = diasParaVencer(v.data_val);
+    var st    = statusValidade(dias);
+    var dtFmt = new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR');
+    var diasTxt = dias < 0 ? 'Há ' + Math.abs(dias) + ' dias' : dias === 0 ? 'Hoje!' : 'Em ' + dias + ' dia' + (dias===1?'':'s');
+    return '<tr style="border-bottom:1px solid var(--border);background:'+st.bg+'">'+
+      '<td style="padding:10px 14px;font-size:12px;font-weight:500">'+v.produto_nome+'</td>'+
+      '<td style="padding:10px 14px"><span style="font-size:10px;padding:2px 8px;border-radius:10px;background:var(--surface2);color:var(--muted)">'+
+        (v.tipo==='lote'?'<i class="ti ti-barcode"></i> Lote':'<i class="ti ti-package"></i> Produto')+'</span></td>'+
+      '<td style="padding:10px 14px;font-size:12px;color:var(--muted)">'+(v.lote||'—')+'</td>'+
+      '<td style="padding:10px 14px;font-size:12px;text-align:right">'+(v.qtde>0?v.qtde+' un.':'—')+'</td>'+
+      '<td style="padding:10px 14px;font-size:12px;white-space:nowrap">'+dtFmt+'</td>'+
+      '<td style="padding:10px 14px">'+
+        '<span style="font-size:11px;font-weight:700;color:'+st.cor+'">'+st.label+'</span>'+
+        '<span style="font-size:10px;color:var(--muted);margin-left:6px">'+diasTxt+'</span>'+
+      '</td>'+
+      '<td style="padding:10px 14px;white-space:nowrap">'+
+        '<button title="Editar" onclick="abrirModalValidade(\''+v.id+'\')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px"><i class="ti ti-edit"></i></button>'+
+        '<button title="Excluir" onclick="excluirValidade(\''+v.id+'\')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:15px"><i class="ti ti-trash"></i></button>'+
+      '</td>'+
+    '</tr>';
+  }).join('');
+}
+
+// ── MODAL ──
+var mvalTipoAtual = 'produto';
+
+function mvalTipo(t) {
+  mvalTipoAtual = t;
+  document.getElementById('mval-btn-prod').className = 'orgao-btn'+(t==='produto'?' selected-sejusp':'');
+  document.getElementById('mval-btn-lote').className = 'orgao-btn'+(t==='lote'?' selected-funsep':'');
+  document.getElementById('mval-lote-wrap').style.display = t==='lote' ? '' : 'none';
+}
+
+function mvalProdChange() {
+  // placeholder para futuras ações ao mudar produto
+}
+
+function abrirModalValidade(id) {
+  // Popular select de produtos
+  var sel = document.getElementById('mval-prod');
+  var nomes = [...new Set(PRODS.map(function(p){return p.nome;}))].sort();
+  sel.innerHTML = '<option value="">Selecione o produto...</option>' +
+    nomes.map(function(n){ return '<option value="'+n+'">'+n+'</option>'; }).join('');
+
+  document.getElementById('mval-id').value = '';
+  document.getElementById('mval-lote').value = '';
+  document.getElementById('mval-qtde').value = '';
+  document.getElementById('mval-data').value = '';
+  document.getElementById('mval-obs').value = '';
+  document.getElementById('mval-erro').style.display = 'none';
+  document.getElementById('mval-titulo').textContent = id ? 'Editar Validade' : 'Registrar Validade';
+  mvalTipo('produto');
+
+  if (id) {
+    var v = VALIDADES.find(function(x){ return x.id === id; });
+    if (v) {
+      document.getElementById('mval-id').value = id;
+      sel.value = v.produto_nome;
+      mvalTipo(v.tipo);
+      document.getElementById('mval-lote').value = v.lote || '';
+      document.getElementById('mval-qtde').value = v.qtde || '';
+      document.getElementById('mval-data').value = v.data_val;
+      document.getElementById('mval-obs').value = v.obs || '';
+    }
+  }
+  abrM('m-validade');
+}
+
+function salvarValidade() {
+  var prod = document.getElementById('mval-prod').value;
+  var data = document.getElementById('mval-data').value;
+  var errEl = document.getElementById('mval-erro');
+  errEl.style.display = 'none';
+
+  if (!prod) { errEl.textContent = 'Selecione o produto.'; errEl.style.display='block'; return; }
+  if (!data) { errEl.textContent = 'Informe a data de validade.'; errEl.style.display='block'; return; }
+  if (mvalTipoAtual === 'lote' && !document.getElementById('mval-lote').value.trim()) {
+    errEl.textContent = 'Informe o número do lote.'; errEl.style.display='block'; return;
+  }
+
+  var id = document.getElementById('mval-id').value || String(Date.now());
+  var registro = {
+    id: id,
+    produto_nome: prod,
+    tipo: mvalTipoAtual,
+    lote: document.getElementById('mval-lote').value.trim(),
+    qtde: parseInt(document.getElementById('mval-qtde').value)||0,
+    data_val: data,
+    obs: document.getElementById('mval-obs').value.trim(),
+    created_at: new Date().toISOString()
+  };
+
+  var idx = VALIDADES.findIndex(function(x){ return x.id === id; });
+  if (idx >= 0) VALIDADES[idx] = registro;
+  else VALIDADES.push(registro);
+
+  salvarValidades();
+  verificarAlertasValidade();
+  renderValidades();
+  fechM('m-validade');
+  toast('Validade '+(idx>=0?'atualizada':'registrada')+'!', true);
+}
+
+function excluirValidade(id) {
+  if (!confirm('Excluir este registro de validade?')) return;
+  VALIDADES = VALIDADES.filter(function(v){ return v.id !== id; });
+  salvarValidades();
+  verificarAlertasValidade();
+  renderValidades();
+  toast('Registro removido.', true);
+}
+
+function exportarValidades() {
+  if (!VALIDADES.length) { toast('Nenhum registro para exportar.', false); return; }
+  var csv = 'Produto;Tipo;Lote;Qtde;Validade;Situação;Dias\n';
+  VALIDADES.sort(function(a,b){ return new Date(a.data_val)-new Date(b.data_val); }).forEach(function(v) {
+    var dias = diasParaVencer(v.data_val);
+    var st   = statusValidade(dias).label;
+    csv += '"'+v.produto_nome+'";"'+(v.tipo==='lote'?'Lote':'Produto')+'";"'+(v.lote||'')+'";"'+v.qtde+'";"'+
+      new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR')+'";'+st+';'+dias+'\n';
+  });
+  var a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
+  a.download = 'validades_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  toast('CSV exportado!', true);
+}
+
+function abrirWppValidades() {
+  var alertas = VALIDADES.filter(function(v){ return diasParaVencer(v.data_val) <= 90; })
+    .sort(function(a,b){ return new Date(a.data_val)-new Date(b.data_val); });
+  if (!alertas.length) { toast('Nenhum produto com vencimento em 90 dias.', false); return; }
+
+  var msg = '⚠️ *CONTROLE DE VALIDADE — ARMAZÉM PREÇO BAIXO*\n';
+  msg += '_' + new Date().toLocaleDateString('pt-BR') + '_\n\n';
+
+  var grupos = { vencido:[], '30':[], '60':[], '90':[] };
+  alertas.forEach(function(v) {
+    var s = statusValidade(diasParaVencer(v.data_val)).cls;
+    if (grupos[s]) grupos[s].push(v);
+  });
+
+  if (grupos.vencido.length) {
+    msg += '🔴 *VENCIDOS — Retirar do estoque:*\n';
+    grupos.vencido.forEach(function(v){ msg += '• ' + v.produto_nome + (v.lote?' (Lote: '+v.lote+')':'') + ' — venceu ' + new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR') + '\n'; });
+    msg += '\n';
+  }
+  if (grupos['30'].length) {
+    msg += '🟠 *VENCIMENTO EM ATÉ 30 DIAS:*\n';
+    grupos['30'].forEach(function(v){ var d=diasParaVencer(v.data_val); msg += '• ' + v.produto_nome + (v.lote?' (Lote: '+v.lote+')':'') + ' — ' + new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR') + ' (' + d + ' dia'+(d===1?'':'s')+')\n'; });
+    msg += '\n';
+  }
+  if (grupos['60'].length) {
+    msg += '🟡 *VENCIMENTO EM 31–60 DIAS:*\n';
+    grupos['60'].forEach(function(v){ var d=diasParaVencer(v.data_val); msg += '• ' + v.produto_nome + (v.lote?' (Lote: '+v.lote+')':'') + ' — ' + new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR') + ' (' + d + ' dias)\n'; });
+    msg += '\n';
+  }
+  if (grupos['90'].length) {
+    msg += '🔵 *VENCIMENTO EM 61–90 DIAS:*\n';
+    grupos['90'].forEach(function(v){ var d=diasParaVencer(v.data_val); msg += '• ' + v.produto_nome + (v.lote?' (Lote: '+v.lote+')':'') + ' — ' + new Date(v.data_val+'T00:00:00').toLocaleDateString('pt-BR') + ' (' + d + ' dias)\n'; });
+  }
+  msg += '\n_Gerado por Armazém Preço Baixo_';
+
+  var n = (CFG.wpp||'').replace(/[^0-9]/g,'');
+  window.open('https://wa.me/55' + n + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
 function inicializar(){
   var cfg=ls('cfg'); if(cfg) Object.assign(CFG,cfg);
   carregarProds();
+  carregarHistPrecos();
+  carregarValidades();
 }
 </script>
 
