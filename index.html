@@ -848,6 +848,35 @@ select.fi{cursor:pointer}
         <label class="fl">Número do Lote</label>
         <input type="text" class="fi" id="mval-lote" placeholder="Ex: LOT240601">
       </div>
+
+      <!-- CÂMERA PARA DIGITALIZAR VALIDADE -->
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:4px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          <i class="ti ti-camera" style="color:var(--accent)"></i> 
+          Digitalizar validade pela câmera
+          <span style="font-size:10px;background:rgba(99,102,241,.15);color:#818cf8;padding:2px 8px;border-radius:10px;font-weight:400">IA</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600">
+            <i class="ti ti-camera"></i> Tirar foto
+            <input type="file" id="val-cam-input" accept="image/*" capture="environment" style="display:none" onchange="digitalizarValidade(this)">
+          </label>
+          <label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);padding:8px 14px;border-radius:8px;font-size:12px">
+            <i class="ti ti-photo"></i> Galeria
+            <input type="file" id="val-gal-input" accept="image/*" style="display:none" onchange="digitalizarValidade(this)">
+          </label>
+          <span style="font-size:11px;color:var(--muted)">Aponte para o rótulo do produto</span>
+        </div>
+        <!-- Preview da foto e resultado -->
+        <div id="val-cam-preview" style="display:none;margin-top:10px">
+          <img id="val-cam-img" style="max-height:120px;border-radius:8px;object-fit:contain;margin-bottom:8px">
+          <div id="val-cam-status" style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">
+            <div id="val-cam-spinner" style="display:none;width:14px;height:14px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></div>
+            <span id="val-cam-txt">Analisando imagem...</span>
+          </div>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div>
           <label class="fl">Quantidade em estoque</label>
@@ -1137,20 +1166,59 @@ function proc(arr){
 }
 
 async function carregarProds(){
-  document.getElementById('tb').innerHTML = '<tr><td colspan="12"><div class="loading"><i class="ti ti-loader-2"></i><p>Carregando produtos...</p></div></td></tr>';
+  var tb = document.getElementById('tb');
+  if(tb) tb.innerHTML = '<tr><td colspan="12"><div class="loading"><i class="ti ti-loader-2"></i><p>Carregando produtos...</p></div></td></tr>';
+
+  // Tentar cache local primeiro para exibir rápido
+  var cached = ls('produtos');
+  if(cached && cached.length){
+    PRODS = proc(cached);
+    atualizarFornSel();
+    filtrar();
+  }
+
   if(sbConectado && sbClient){
     try{
-      var r = await sbClient.from('v_produtos_status').select('*').order('nome');
-      if(r.error) throw r.error;
-      PRODS = r.data||[];
+      // Paginação: buscar 1000 por vez
+      var todos = [];
+      var pagina = 0;
+      var tamanho = 1000;
+      var continuar = true;
+
+      while(continuar){
+        var from = pagina * tamanho;
+        var to   = from + tamanho - 1;
+        var r = await sbClient.from('v_produtos_status')
+          .select('*')
+          .order('nome')
+          .range(from, to);
+
+        if(r.error) throw r.error;
+
+        var lote = r.data || [];
+        todos = todos.concat(lote);
+
+        // Atualizar progresso
+        if(tb) tb.innerHTML = '<tr><td colspan="12"><div class="loading"><i class="ti ti-loader-2"></i><p>Carregando... '+todos.length+' produtos</p></div></td></tr>';
+
+        // Se retornou menos que o tamanho, chegou ao fim
+        if(lote.length < tamanho){
+          continuar = false;
+        } else {
+          pagina++;
+        }
+      }
+
+      PRODS = todos;
       ls('produtos', PRODS);
     }catch(e){
       toast('Erro Supabase: '+e.message+'. Usando dados locais.', false);
-      PRODS = proc(ls('produtos')||demo());
+      if(!cached || !cached.length){
+        PRODS = proc(demo());
+      }
     }
   } else {
-    var saved = ls('produtos');
-    PRODS = proc(saved && saved.length ? saved : demo());
+    PRODS = proc(cached && cached.length ? cached : demo());
   }
   atualizarFornSel();
   filtrar();
@@ -2275,6 +2343,109 @@ function abrirModalValidade(id) {
     }
   }
   abrM('m-validade');
+}
+
+// ── DIGITALIZAR VALIDADE PELA CÂMERA ──
+async function digitalizarValidade(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  input.value = '';
+
+  var preview = document.getElementById('val-cam-preview');
+  var img     = document.getElementById('val-cam-img');
+  var status  = document.getElementById('val-cam-status');
+  var spinner = document.getElementById('val-cam-spinner');
+  var txt     = document.getElementById('val-cam-txt');
+
+  // Mostrar preview
+  var reader = new FileReader();
+  reader.onload = async function(e) {
+    img.src = e.target.result;
+    preview.style.display = 'block';
+    spinner.style.display = 'inline-block';
+    txt.textContent = 'Analisando imagem com IA...';
+    txt.style.color = 'var(--muted)';
+
+    try {
+      // Converter para base64
+      var base64 = e.target.result.split(',')[1];
+      var mimeType = file.type || 'image/jpeg';
+
+      // Chamar API Claude com visão
+      var response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 500,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: mimeType, data: base64 }
+              },
+              {
+                type: 'text',
+                text: 'Analise esta imagem de um produto e extraia as seguintes informações. Responda APENAS em JSON, sem nenhum texto adicional:\n{\n  "data_validade": "YYYY-MM-DD ou null se não encontrar",\n  "lote": "número do lote ou null",\n  "produto": "nome do produto se visível ou null",\n  "confianca": "alta/media/baixa"\n}\nProcure por: VAL, VALID, VALIDADE, VENCE, USE BY, BEST BY, EXP, data no formato DD/MM/AAAA, MM/AAAA, LOTE, LOT, BATCH.'
+              }
+            ]
+          }]
+        })
+      });
+
+      var data = await response.json();
+      var texto = data.content && data.content[0] ? data.content[0].text : '';
+      
+      // Limpar e parsear JSON
+      var clean = texto.replace(/```json|```/g, '').trim();
+      var resultado = JSON.parse(clean);
+
+      // Preencher campos automaticamente
+      var preenchidos = [];
+
+      if (resultado.data_validade && resultado.data_validade !== 'null') {
+        document.getElementById('mval-data').value = resultado.data_validade;
+        preenchidos.push('data de validade');
+      }
+
+      if (resultado.lote && resultado.lote !== 'null') {
+        document.getElementById('mval-lote').value = resultado.lote;
+        // Ativar modo lote automaticamente
+        mvalTipo('lote');
+        preenchidos.push('número do lote');
+      }
+
+      if (resultado.produto && resultado.produto !== 'null') {
+        // Tentar encontrar produto na lista
+        var sel = document.getElementById('mval-prod');
+        var opts = Array.from(sel.options);
+        var match = opts.find(function(o) {
+          return o.text.toLowerCase().indexOf(resultado.produto.toLowerCase().substring(0,10)) > -1;
+        });
+        if (match) {
+          sel.value = match.value;
+          preenchidos.push('produto');
+        }
+      }
+
+      spinner.style.display = 'none';
+      if (preenchidos.length > 0) {
+        txt.textContent = '✓ Detectado: ' + preenchidos.join(', ') + ' (confiança: ' + resultado.confianca + ')';
+        txt.style.color = 'var(--green)';
+      } else {
+        txt.textContent = '⚠ Não foi possível detectar a validade. Preencha manualmente.';
+        txt.style.color = 'var(--yellow)';
+      }
+
+    } catch(err) {
+      spinner.style.display = 'none';
+      txt.textContent = '✗ Erro ao analisar: ' + (err.message || 'tente novamente');
+      txt.style.color = 'var(--red)';
+      console.error(err);
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 function salvarValidade() {
