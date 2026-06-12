@@ -216,6 +216,7 @@ select.fi{cursor:pointer}
 
 /* LOADING */
 .loading{text-align:center;padding:40px;color:var(--muted)}
+@keyframes scanline{0%{top:10%}50%{top:80%}100%{top:10%}}
 .loading i{font-size:32px;display:block;margin-bottom:10px;color:var(--accent);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .vazio{text-align:center;padding:48px 24px;color:var(--muted)}
@@ -351,7 +352,11 @@ select.fi{cursor:pointer}
           <div class="cstat cs" onclick="setFC('zerado')"><div class="clbl"><i class="ti ti-circle-x"></i> Zerado</div><div class="cnum" id="c-zerado">0</div><div class="csub">Sem estoque</div></div>
         </div>
         <div class="tlb">
-          <div class="sw"><i class="ti ti-search"></i><input type="text" id="busca" placeholder="Buscar produto, código, fornecedor..." oninput="filtrar()"></div>
+          <div class="sw" style="flex:1;min-width:200px">
+            <i class="ti ti-search"></i>
+            <input type="text" id="busca" placeholder="Buscar produto, código, fornecedor..." oninput="filtrar()">
+            <button onclick="abrirLeitorBarras()" title="Ler código de barras" style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 6px;font-size:16px;display:flex;align-items:center"><i class="ti ti-barcode"></i></button>
+          </div>
           <select class="sel" id="ord" onchange="filtrar()">
             <option value="pr">Prioridade</option>
             <option value="az">Nome A–Z</option>
@@ -902,6 +907,60 @@ select.fi{cursor:pointer}
   </div>
 </div>
 
+<!-- MODAL LEITOR CÓDIGO DE BARRAS -->
+<div class="mov" id="m-barcode" onclick="if(event.target===this)fecharLeitorBarras()">
+  <div class="modal" style="width:460px">
+    <h3><i class="ti ti-barcode" style="color:var(--accent)"></i> Leitor de Código de Barras</h3>
+    <div class="msub">Aponte a câmera para o código de barras do produto</div>
+
+    <!-- Câmera ao vivo -->
+    <div id="bc-cam-wrap" style="position:relative;margin:16px 0;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3">
+      <video id="bc-video" style="width:100%;height:100%;object-fit:cover" autoplay muted playsinline></video>
+      <!-- Mira central -->
+      <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:240px;height:80px;border:2px solid var(--accent);border-radius:6px;box-shadow:0 0 0 9999px rgba(0,0,0,0.4)">
+        <div style="position:absolute;top:-1px;left:-1px;width:20px;height:20px;border-top:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:2px 0 0 0"></div>
+        <div style="position:absolute;top:-1px;right:-1px;width:20px;height:20px;border-top:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 2px 0 0"></div>
+        <div style="position:absolute;bottom:-1px;left:-1px;width:20px;height:20px;border-bottom:3px solid var(--accent);border-left:3px solid var(--accent);border-radius:0 0 0 2px"></div>
+        <div style="position:absolute;bottom:-1px;right:-1px;width:20px;height:20px;border-bottom:3px solid var(--accent);border-right:3px solid var(--accent);border-radius:0 0 2px 0"></div>
+        <!-- Linha de scan animada -->
+        <div id="bc-scanline" style="position:absolute;left:0;right:0;height:2px;background:var(--accent);opacity:0.8;animation:scanline 1.5s ease-in-out infinite"></div>
+      </div>
+      <!-- Status -->
+      <div id="bc-status" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.7);color:#fff;font-size:12px;text-align:center;padding:8px">
+        Iniciando câmera...
+      </div>
+    </div>
+
+    <!-- Resultado -->
+    <div id="bc-resultado" style="display:none;background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px">Produto encontrado:</div>
+      <div id="bc-prod-nome" style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px"></div>
+      <div id="bc-prod-info" style="font-size:12px;color:var(--muted)"></div>
+      <div id="bc-ean-lido" style="font-size:11px;color:var(--subtle);margin-top:4px"></div>
+    </div>
+
+    <!-- Não encontrado -->
+    <div id="bc-nao-encontrado" style="display:none;background:var(--red-bg);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="font-size:12px;color:var(--red)"><i class="ti ti-alert-triangle"></i> Produto não encontrado no sistema</div>
+      <div id="bc-ean-nf" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+
+    <!-- Input manual como alternativa -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">
+      <div class="sw" style="flex:1">
+        <i class="ti ti-barcode"></i>
+        <input type="text" id="bc-manual" placeholder="Ou digite o código de barras..." oninput="buscarPorEAN(this.value)" style="font-size:13px">
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:16px">Você também pode usar um leitor de código de barras USB conectado</div>
+
+    <div class="mbtns">
+      <button class="bcn" onclick="fecharLeitorBarras()">Fechar</button>
+      <button id="bc-btn-ver" class="bsav" style="display:none" onclick="irParaProduto()"><i class="ti ti-eye"></i> Ver produto</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <!-- MODAL LEITOR DE NOTA -->
 <div class="mov" id="m-leitor-nota">
@@ -1445,21 +1504,23 @@ function importar(input){
         if(cols.length<2) continue;
         var obj={}; hdr.forEach(function(h,j){obj[h]=cols[j]||'';});
 
-        var pn = obj['nome']||obj['nome_produto']||obj['descricao']||obj['descricao_produto']||'';
+        var pn = obj['nome']||obj['nome produto']||obj['nome_produto']||obj['descricao']||obj['descricao_produto']||'';
         if(!pn.trim()||pn.trim()==='-'){erros++;continue;}
 
-        var codErp = (obj['codigo_erp']||obj['codproduto']||obj['id']||obj['codigo']||String(i)).trim();
+        var codErp = (obj['codigo_erp']||obj['codproduto']||obj['codprodutoimg']||obj['id']||obj['codigo']||String(i)).trim();
 
         // IGNORAR DUPLICATA NO CSV
         if(codigosVistos[codErp]){continue;}
         codigosVistos[codErp] = true;
 
-        var ean       = obj['codigo_barras']||obj['ean']||obj['codigobarra']||'';
-        var custo     = parseFloat((obj['custo_final']||obj['custo']||obj['custofinal']||obj['preco_custo']||'0').replace(',','.'))||0;
+        var ean       = obj['codigo_barras']||obj['codigobarra']||obj['ean']||'';
+        var custo     = parseFloat((obj['custo_final']||obj['custo']||obj['custofinal']||obj['preco_custo']||obj['preco_atacado']||'0').replace(',','.'))||0;
         var custoMed  = parseFloat((obj['custo_medio']||obj['customedio']||'0').replace(',','.'))||0;
-        var pvenda    = parseFloat((obj['preco_venda']||obj['preco_varejo']||obj['prpauta']||'0').replace(',','.'))||0;
+        var pvenda    = parseFloat((obj['preco_venda']||obj['preco varejo']||obj['preco_varejo']||obj['prpauta']||'0').replace(',','.'))||0;
         var est       = parseFloat((obj['estoque']||obj['estdisponivel']||obj['estoqueatual']||'0').replace(',','.'))||0;
         var margem    = parseFloat((obj['margem']||obj['margemlucro']||'0').replace(',','.'))||0;
+        var emb       = (obj['embalagem']||obj['emb']||'UN').trim();
+        var qtdeEmb   = parseFloat((obj['qtde_emb']||obj['qtdeembalagem']||'1').replace(',','.'))||1;
         var custoFinal = custo > 0 ? custo : custoMed;
 
         if(pvenda===0 && custoFinal>0 && margem>0){
@@ -1470,12 +1531,12 @@ function importar(input){
           codigo_erp:    codErp,
           codigo_barras: ean,
           nome:          pn.trim().toUpperCase(),
-          marca:         (obj['marca']||'').trim().toUpperCase(),
+          marca:         (obj['marca']||obj['codigofabrica']||'').trim().toUpperCase(),
           fornecedor_nome:(obj['fornecedor']||obj['fornecedor_nome']||'').trim(),
           tipo_forn:     'local',
           lead_time:     parseInt(obj['lead_time']||CFG.leadLocal)||CFG.leadLocal,
-          embalagem:     (obj['embalagem']||'UN').trim(),
-          qtde_emb:      parseFloat((obj['qtde_emb']||obj['qtdeembalagem']||'1').replace(',','.'))||1,
+          embalagem:     emb,
+          qtde_emb:      qtdeEmb,
           estoque:       est,
           estoque_minimo:parseFloat((obj['estoque_minimo']||'0').replace(',','.'))||0,
           estoque_maximo:parseFloat((obj['estoque_maximo']||'0').replace(',','.'))||0,
@@ -2594,6 +2655,174 @@ function abrirWppValidades() {
 
   var n = (CFG.wpp||'').replace(/[^0-9]/g,'');
   window.open('https://wa.me/55' + n + '?text=' + encodeURIComponent(msg), '_blank');
+}
+
+// ═══════════════════════════════════════════════
+// LEITOR DE CÓDIGO DE BARRAS
+// ═══════════════════════════════════════════════
+var bcStream = null;
+var bcInterval = null;
+var bcProdutoEncontrado = null;
+
+function abrirLeitorBarras() {
+  bcProdutoEncontrado = null;
+  document.getElementById('bc-resultado').style.display = 'none';
+  document.getElementById('bc-nao-encontrado').style.display = 'none';
+  document.getElementById('bc-btn-ver').style.display = 'none';
+  document.getElementById('bc-manual').value = '';
+  document.getElementById('bc-status').textContent = 'Iniciando câmera...';
+  abrM('m-barcode');
+  iniciarCameraBarras();
+}
+
+async function iniciarCameraBarras() {
+  try {
+    // Parar stream anterior se existir
+    if (bcStream) {
+      bcStream.getTracks().forEach(function(t){ t.stop(); });
+    }
+
+    var video = document.getElementById('bc-video');
+    bcStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    video.srcObject = bcStream;
+    await video.play();
+
+    document.getElementById('bc-status').textContent = 'Aponte para o código de barras...';
+
+    // Usar BarcodeDetector se disponível (Chrome/Android)
+    if ('BarcodeDetector' in window) {
+      var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e','qr_code'] });
+      bcInterval = setInterval(async function() {
+        try {
+          var barcodes = await detector.detect(video);
+          if (barcodes.length > 0) {
+            var ean = barcodes[0].rawValue;
+            processarEAN(ean);
+          }
+        } catch(e) {}
+      }, 300);
+    } else {
+      // Fallback: usar ZXing via CDN
+      carregarZXing();
+    }
+  } catch(e) {
+    document.getElementById('bc-status').textContent = 'Câmera não disponível. Use o campo manual abaixo.';
+    document.getElementById('bc-cam-wrap').style.display = 'none';
+  }
+}
+
+function carregarZXing() {
+  if (document.getElementById('zxing-script')) {
+    iniciarZXing(); return;
+  }
+  var s = document.createElement('script');
+  s.id = 'zxing-script';
+  s.src = 'https://unpkg.com/@zxing/library@latest/umd/index.min.js';
+  s.onload = iniciarZXing;
+  s.onerror = function(){ document.getElementById('bc-status').textContent = 'Use o campo manual abaixo para digitar o código.'; };
+  document.head.appendChild(s);
+}
+
+function iniciarZXing() {
+  try {
+    var video = document.getElementById('bc-video');
+    var codeReader = new ZXing.BrowserMultiFormatReader();
+    codeReader.decodeFromVideoDevice(null, video, function(result, err) {
+      if (result) processarEAN(result.getText());
+    });
+    document.getElementById('bc-status').textContent = 'Aponte para o código de barras...';
+  } catch(e) {
+    document.getElementById('bc-status').textContent = 'Use o campo manual abaixo.';
+  }
+}
+
+function processarEAN(ean) {
+  if (!ean) return;
+  // Parar leitura após detectar
+  if (bcInterval) { clearInterval(bcInterval); bcInterval = null; }
+
+  document.getElementById('bc-status').textContent = '✓ Código lido: ' + ean;
+
+  // Buscar produto pelo EAN
+  var prod = buscarPorEAN(ean);
+  if (!prod) {
+    // Tentar também pelo codigo_erp
+    prod = PRODS.find(function(p){ return String(p.codigo_erp) === String(ean) || String(p.id) === String(ean); });
+  }
+}
+
+function buscarPorEAN(ean) {
+  if (!ean || ean.length < 3) return null;
+
+  // Buscar no array de produtos
+  var prod = PRODS.find(function(p){
+    return (p.codigo_barras && p.codigo_barras.trim() === ean.trim()) ||
+           (p.ean && p.ean.trim() === ean.trim()) ||
+           (String(p.codigo_erp).trim() === ean.trim());
+  });
+
+  var resEl  = document.getElementById('bc-resultado');
+  var nfEl   = document.getElementById('bc-nao-encontrado');
+  var btnVer = document.getElementById('bc-btn-ver');
+
+  if (prod) {
+    bcProdutoEncontrado = prod;
+    document.getElementById('bc-prod-nome').textContent = prod.nome;
+    document.getElementById('bc-prod-info').textContent =
+      'Estoque: ' + (prod.estoque||0) + ' un. · Custo: ' + moeda(prod.custo) + ' · Venda: ' + moeda(prod.preco_venda);
+    document.getElementById('bc-ean-lido').textContent = 'EAN: ' + ean;
+    resEl.style.display = 'block';
+    nfEl.style.display  = 'none';
+    btnVer.style.display = 'inline-flex';
+    document.getElementById('bc-status').textContent = '✓ Produto encontrado!';
+  } else {
+    bcProdutoEncontrado = null;
+    document.getElementById('bc-ean-nf').textContent = 'EAN: ' + ean;
+    nfEl.style.display  = 'block';
+    resEl.style.display = 'none';
+    btnVer.style.display = 'none';
+    document.getElementById('bc-status').textContent = 'Produto não encontrado. Tente outro.';
+    // Reiniciar leitura após 2s
+    setTimeout(function(){
+      if (bcStream) {
+        document.getElementById('bc-status').textContent = 'Aponte para outro código...';
+        if ('BarcodeDetector' in window) {
+          var video = document.getElementById('bc-video');
+          var detector = new BarcodeDetector({ formats: ['ean_13','ean_8','code_128','code_39','upc_a','upc_e'] });
+          bcInterval = setInterval(async function() {
+            try {
+              var barcodes = await detector.detect(video);
+              if (barcodes.length > 0) processarEAN(barcodes[0].rawValue);
+            } catch(e) {}
+          }, 300);
+        }
+      }
+    }, 2000);
+  }
+  return prod || null;
+}
+
+function irParaProduto() {
+  if (!bcProdutoEncontrado) return;
+  fecharLeitorBarras();
+  // Buscar na tabela e destacar
+  var busca = document.getElementById('busca');
+  if (busca) {
+    busca.value = bcProdutoEncontrado.nome.substring(0, 30);
+    filtrar();
+  }
+  // Ir para aba produtos
+  var btnProd = document.querySelectorAll('.nb')[1];
+  if (btnProd) setMod('produtos', btnProd);
+  toast('Produto: ' + bcProdutoEncontrado.nome, true);
+}
+
+function fecharLeitorBarras() {
+  if (bcInterval) { clearInterval(bcInterval); bcInterval = null; }
+  if (bcStream) { bcStream.getTracks().forEach(function(t){ t.stop(); }); bcStream = null; }
+  fechM('m-barcode');
 }
 
 function inicializar(){
