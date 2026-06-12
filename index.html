@@ -269,6 +269,12 @@ select.fi{cursor:pointer}
 /* Nav mobile começa oculto — só exibe após login via mobSetLogado(true) */
 #mob-nav { display: none; }
 
+/* Botões tipo produto/lote na modal de validade */
+.orgao-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif}
+.orgao-btn:hover{border-color:var(--accent);color:var(--accent)}
+.selected-sejusp{background:rgba(59,130,246,.15)!important;border-color:var(--accent)!important;color:var(--accent2)!important}
+.selected-funsep{background:rgba(167,139,250,.15)!important;border-color:var(--purple)!important;color:var(--purple)!important}
+
 .fcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .fcard-info{flex:1}
 .fcard-nome{font-family:Syne,sans-serif;font-size:14px;font-weight:600}
@@ -974,7 +980,7 @@ select.fi{cursor:pointer}
       <!-- SELETOR DE PRODUTO INTELIGENTE -->
       <div>
         <label class="fl">Produto selecionado</label>
-        <div id="mval-prod-selecionado" style="display:none;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div id="mval-prod-selecionado" style="display:none;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:10px 12px;align-items:center;justify-content:space-between;gap:8px">
           <div>
             <div id="mval-prod-nome" style="font-size:13px;font-weight:600;color:var(--text)">—</div>
             <div id="mval-prod-cod" style="font-size:11px;color:var(--muted);margin-top:2px">—</div>
@@ -2216,7 +2222,7 @@ function renderUsuarios(){
 // MÓDULOS
 // ═══════════════════════════════════════════════
 function setMod(m,el){
-  ['dashboard','produtos','pedidos','config','abc','fornecedores','precos','validades'].forEach(function(x){
+  ['dashboard','consulta','produtos','pedidos','config','abc','fornecedores','precos','validades'].forEach(function(x){
     var el2=document.getElementById('mod-'+x);
     if(el2) el2.style.display=x===m?'block':'none';
   });
