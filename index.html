@@ -266,6 +266,8 @@ select.fi{cursor:pointer}
   .ubadge:first-child{display:none}
   .topbar-right{gap:6px}
 }
+/* Nav mobile começa oculto — só exibe após login via mobSetLogado(true) */
+#mob-nav { display: none; }
 
 .fcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .fcard-info{flex:1}
@@ -1342,6 +1344,7 @@ async function login(){
       document.getElementById('app').classList.add('visible');
       document.getElementById('unome').textContent = nome;
       inicializar();
+      mobSetLogado(true);
       return;
     } catch(e) {
       btn.textContent = 'Entrar no sistema';
@@ -1370,6 +1373,7 @@ async function login(){
   document.getElementById('app').classList.add('visible');
   document.getElementById('unome').textContent = found.n;
   inicializar();
+  mobSetLogado(true);
 }
 
 async function sair(){
@@ -1380,6 +1384,18 @@ async function sair(){
   document.getElementById('lu').value = '';
   document.getElementById('lp').value = '';
   usuAtual = null;
+  mobSetLogado(false);
+}
+
+function mobSetLogado(logado) {
+  var nav   = document.getElementById('mob-nav');
+  var sheet = document.getElementById('mob-more-sheet');
+  if (!nav) return;
+  // No mobile (≤600px): mostra/esconde conforme login
+  if (window.innerWidth <= 600) {
+    nav.style.display = logado ? 'block' : 'none';
+  }
+  if (!logado && sheet) sheet.classList.remove('open');
 }
 
 (function(){
@@ -1403,6 +1419,7 @@ async function sair(){
     document.getElementById('app').classList.add('visible');
     document.getElementById('unome').textContent = s.n;
     inicializar();
+    mobSetLogado(true);
   }
 })();
 
@@ -3940,14 +3957,20 @@ function mobNav(mod, el) {
 
   // Atualizar ícone ativo na bottom nav
   document.querySelectorAll('#mob-nav .mn-item').forEach(function(b){ b.classList.remove('on'); });
-  var idMap = {dashboard:'mn-dashboard', consulta:'mn-consulta', produtos:'mn-produtos', pedidos:'mn-pedidos'};
+  var idMap = {dashboard:'mn-dashboard', consulta:'mn-consulta', pedidos:'mn-pedidos'};
   if (idMap[mod]) {
     var btn = document.getElementById(idMap[mod]);
     if (btn) btn.classList.add('on');
   }
-  // Chamar setMod com o botão da topbar correspondente
+  // Chamar setMod pelo ID do módulo direto, sem depender de índice
+  // (índices mudam conforme botões adicionados/removidos)
   var nb = document.querySelectorAll('.nb');
-  var modMap = {dashboard:0, consulta:1, produtos:2, pedidos:3, fornecedores:4, abc:5, precos:6, validades:7, config:8};
+  var modMap = {};
+  nb.forEach(function(b, i) {
+    // extrai o nome do módulo do onclick
+    var m = (b.getAttribute('onclick') || '').match(/setMod\('([^']+)'/);
+    if (m) modMap[m[1]] = i;
+  });
   var idx = modMap[mod];
   if (idx !== undefined && nb[idx]) {
     setMod(mod, nb[idx]);
@@ -3955,15 +3978,31 @@ function mobNav(mod, el) {
 }
 
 function mobFiltroStatus() {
-  // Botão Críticos: vai para produtos filtrando críticos
-  mobNav('produtos', null);
-  setTimeout(function(){ setFC('critico'); }, 80);
-  // Marcar o botão de críticos como ativo
+  // Botão Críticos: vai para DASHBOARD filtrando críticos
+  fecharCamConsulta();
   document.querySelectorAll('#mob-nav .mn-item').forEach(function(b){ b.classList.remove('on'); });
   document.getElementById('mn-critico').classList.add('on');
+  // Ativar dashboard
+  var nb = document.querySelectorAll('.nb');
+  var modMap = {};
+  nb.forEach(function(b, i) {
+    var m = (b.getAttribute('onclick') || '').match(/setMod\('([^']+)'/);
+    if (m) modMap[m[1]] = i;
+  });
+  var idx = modMap['dashboard'];
+  if (idx !== undefined && nb[idx]) setMod('dashboard', nb[idx]);
+  // Aplicar filtro crítico com delay para o módulo carregar
+  setTimeout(function(){
+    setFC('critico');
+    // rolar para a tabela
+    var main = document.getElementById('main');
+    if (main) main.scrollTop = 200;
+  }, 120);
 }
 
 function abrirMobMore() {
+  // Só abre se o usuário estiver logado (app visível)
+  if (!document.getElementById('app').classList.contains('visible')) return;
   // Atualizar badge de validades no sheet
   var badgeVal = document.getElementById('badge-val');
   var mobBadge = document.getElementById('mob-badge-val');
