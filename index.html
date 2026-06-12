@@ -1434,76 +1434,125 @@ function importar(input){
       var linhas=txt.split('\n').filter(function(l){return l.trim();});
       var sep=linhas[0].indexOf(';')>-1?';':',';
       var hdr=linhas[0].split(sep).map(function(h){return h.trim().toLowerCase().replace(/"/g,'').replace(/\s+/g,'_');});
-      log.innerHTML='<div class="linf">Arquivo: '+f.name+' ('+linhas.length+' linhas)</div>';
-      log.innerHTML+='<div class="linf">Colunas: '+hdr.join(', ')+'</div>';
+      log.innerHTML='<div class="linf">📄 Arquivo: '+f.name+' ('+linhas.length+' linhas)</div>';
 
+      // ── 1. PARSEAR LINHAS ──
       var novos=[]; var erros=0;
+      var codigosVistos = {}; // controle de duplicidade no próprio CSV
+
       for(var i=1;i<linhas.length;i++){
         var cols=linhas[i].split(sep).map(function(c){return c.trim().replace(/^"|"$/g,'');});
         if(cols.length<2) continue;
         var obj={}; hdr.forEach(function(h,j){obj[h]=cols[j]||'';});
 
-        // Suporte ao CSV do ERP (produtos_completo.csv)
         var pn = obj['nome']||obj['nome_produto']||obj['descricao']||obj['descricao_produto']||'';
         if(!pn.trim()||pn.trim()==='-'){erros++;continue;}
 
-        var codErp = obj['codigo_erp']||obj['codproduto']||obj['id']||obj['codigo']||String(i);
-        var ean    = obj['codigo_barras']||obj['ean']||obj['codigobarra']||'';
-        var custo  = parseFloat((obj['custo_final']||obj['custo']||obj['custofinal']||obj['preco_custo']||'0').replace(',','.'))||0;
-        var custoMedio = parseFloat((obj['custo_medio']||obj['customedio']||'0').replace(',','.'))||0;
-        var pvenda = parseFloat((obj['preco_venda']||obj['preco_varejo']||obj['prpauta']||'0').replace(',','.'))||0;
-        var est    = parseFloat((obj['estoque']||obj['estdisponivel']||obj['estoqueatual']||'0').replace(',','.'))||0;
-        var margem = parseFloat((obj['margem']||obj['margemlucro']||'0').replace(',','.'))||0;
+        var codErp = (obj['codigo_erp']||obj['codproduto']||obj['id']||obj['codigo']||String(i)).trim();
 
-        // Se preço venda não informado, calcular pela margem
-        if(pvenda===0 && custo>0 && margem>0){
-          pvenda = custo * (1 + margem/100);
+        // IGNORAR DUPLICATA NO CSV
+        if(codigosVistos[codErp]){continue;}
+        codigosVistos[codErp] = true;
+
+        var ean       = obj['codigo_barras']||obj['ean']||obj['codigobarra']||'';
+        var custo     = parseFloat((obj['custo_final']||obj['custo']||obj['custofinal']||obj['preco_custo']||'0').replace(',','.'))||0;
+        var custoMed  = parseFloat((obj['custo_medio']||obj['customedio']||'0').replace(',','.'))||0;
+        var pvenda    = parseFloat((obj['preco_venda']||obj['preco_varejo']||obj['prpauta']||'0').replace(',','.'))||0;
+        var est       = parseFloat((obj['estoque']||obj['estdisponivel']||obj['estoqueatual']||'0').replace(',','.'))||0;
+        var margem    = parseFloat((obj['margem']||obj['margemlucro']||'0').replace(',','.'))||0;
+        var custoFinal = custo > 0 ? custo : custoMed;
+
+        if(pvenda===0 && custoFinal>0 && margem>0){
+          pvenda = Math.round(custoFinal * (1 + margem/100) * 100) / 100;
         }
 
         novos.push({
-          codigo_erp: codErp,
+          codigo_erp:    codErp,
           codigo_barras: ean,
-          nome: pn.trim().toUpperCase(),
-          marca: (obj['marca']||'').trim().toUpperCase(),
-          fornecedor_nome: (obj['fornecedor']||obj['fornecedor_nome']||'').trim(),
-          tipo_forn: 'local',
-          lead_time: parseInt(obj['lead_time']||CFG.leadLocal)||CFG.leadLocal,
-          embalagem: (obj['embalagem']||'UN').trim(),
-          qtde_emb: parseFloat((obj['qtde_emb']||obj['qtdeembalagem']||'1').replace(',','.'))||1,
-          estoque: est,
-          estoque_minimo: parseFloat((obj['estoque_minimo']||obj['quantidade_minima']||'0').replace(',','.'))||0,
-          estoque_maximo: parseFloat((obj['estoque_maximo']||'0').replace(',','.'))||0,
-          ponto_pedido: parseFloat((obj['ponto_pedido']||'0').replace(',','.'))||0,
-          custo: custo > 0 ? custo : custoMedio,
-          preco_venda: pvenda,
-          margem: margem,
-          venda_dia: 0,
-          inativo: false,
+          nome:          pn.trim().toUpperCase(),
+          marca:         (obj['marca']||'').trim().toUpperCase(),
+          fornecedor_nome:(obj['fornecedor']||obj['fornecedor_nome']||'').trim(),
+          tipo_forn:     'local',
+          lead_time:     parseInt(obj['lead_time']||CFG.leadLocal)||CFG.leadLocal,
+          embalagem:     (obj['embalagem']||'UN').trim(),
+          qtde_emb:      parseFloat((obj['qtde_emb']||obj['qtdeembalagem']||'1').replace(',','.'))||1,
+          estoque:       est,
+          estoque_minimo:parseFloat((obj['estoque_minimo']||'0').replace(',','.'))||0,
+          estoque_maximo:parseFloat((obj['estoque_maximo']||'0').replace(',','.'))||0,
+          ponto_pedido:  parseFloat((obj['ponto_pedido']||'0').replace(',','.'))||0,
+          custo:         custoFinal,
+          preco_venda:   pvenda,
+          margem:        margem,
+          venda_dia:     0,
+          inativo:       false,
         });
       }
 
-      log.innerHTML+='<div class="lok">&#10003; '+novos.length+' produtos lidos</div>';
-      if(erros) log.innerHTML+='<div class="lwarn">&#9888; '+erros+' linhas ignoradas (sem nome)</div>';
+      var total = novos.length;
+      log.innerHTML+='<div class="lok">✓ '+total+' produtos únicos lidos</div>';
+      if(erros) log.innerHTML+='<div class="lwarn">⚠ '+erros+' linhas ignoradas (sem nome ou duplicadas)</div>';
 
-      // Salvar no Supabase
+      // ── 2. SALVAR NO SUPABASE com UPSERT ──
+      // upsert com onConflict='codigo_erp' garante:
+      // - INSERT para novos produtos
+      // - UPDATE (estoque, custo, preco_venda) para existentes
       if(sbConectado && sbClient && novos.length){
-        log.innerHTML+='<div class="linf">Salvando no Supabase (pode demorar)...</div>';
-        var chunk=50; var salvos=0;
+        log.innerHTML+='<div class="linf">⏳ Sincronizando com Supabase...</div>';
+        var chunk=100; var salvos=0;
+
         for(var j=0;j<novos.length;j+=chunk){
-          var sl=novos.slice(j,j+chunk);
-          var rv=await sbClient.from('produtos').upsert(sl,{onConflict:'codigo_erp'});
+          var sl = novos.slice(j, j+chunk);
+          var rv = await sbClient.from('produtos').upsert(sl, {
+            onConflict: 'codigo_erp',
+            ignoreDuplicates: false  // sempre atualiza
+          });
           if(rv.error) throw rv.error;
-          salvos+=sl.length;
-          log.innerHTML='<div class="linf">Salvando... '+salvos+'/'+novos.length+'</div>';
+          salvos += sl.length;
+          log.innerHTML = '<div class="linf">⏳ Sincronizando... '+salvos+'/'+total+'</div>';
         }
-        log.innerHTML+='<div class="lok">&#10003; Salvo no Supabase!</div>';
+        log.innerHTML+='<div class="lok">✓ Supabase atualizado!</div>';
+
+        // ── 3. ESTATÍSTICAS ──
+        var novosCount  = novos.filter(function(p){ return !PRODS.find(function(x){return x.codigo_erp===p.codigo_erp;}); }).length;
+        var atualizados = total - novosCount;
+        if(novosCount)   log.innerHTML+='<div class="lok">✓ '+novosCount+' novos produtos cadastrados</div>';
+        if(atualizados)  log.innerHTML+='<div class="linf">↻ '+atualizados+' produtos atualizados (estoque, custo, preço)</div>';
       }
 
-      PRODS=proc(novos); ls('produtos',novos); atualizarFornSel(); filtrar();
-      log.innerHTML+='<div class="lok">&#10003; Concluído! '+novos.length+' produtos importados.</div>';
-      toast('Importação OK! '+novos.length+' produtos.',true);
+      // ── 4. ATUALIZAR LOCAL ──
+      // Mesclar: preservar configurações manuais (fornecedor, ponto_pedido, venda_dia)
+      // mas atualizar estoque/custo/preço com dados do ERP
+      var mapaAtual = {};
+      PRODS.forEach(function(p){ mapaAtual[p.codigo_erp] = p; });
+
+      var merged = novos.map(function(n){
+        var existente = mapaAtual[n.codigo_erp];
+        if(existente){
+          return Object.assign({}, existente, {
+            // Campos que o ERP atualiza
+            estoque:       n.estoque,
+            custo:         n.custo > 0 ? n.custo : existente.custo,
+            preco_venda:   n.preco_venda > 0 ? n.preco_venda : existente.preco_venda,
+            margem:        n.margem,
+            codigo_barras: n.codigo_barras || existente.codigo_barras,
+            // Campos que preservamos se já configurados manualmente
+            fornecedor_nome: existente.fornecedor_nome || n.fornecedor_nome,
+            ponto_pedido:    existente.ponto_pedido > 0 ? existente.ponto_pedido : n.ponto_pedido,
+            venda_dia:       existente.venda_dia || 0,
+          });
+        }
+        return n;
+      });
+
+      PRODS = proc(merged);
+      ls('produtos', merged);
+      atualizarFornSel();
+      filtrar();
+      log.innerHTML+='<div class="lok">✓ Concluído! '+total+' produtos no sistema.</div>';
+      toast('Importação OK! '+total+' produtos.',true);
+
     }catch(err){
-      log.innerHTML+='<div style="color:var(--red)">Erro: '+err.message+'</div>';
+      log.innerHTML+='<div style="color:var(--red)">✗ Erro: '+err.message+'</div>';
       console.error(err);
     }
   };
